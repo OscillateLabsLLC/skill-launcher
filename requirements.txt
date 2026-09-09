@@ -1,4 +1,4 @@
-neon-utils[network]~=1.12
+neon-utils[network]~=1.14,>=1.14.2a5
 neon-data-models~=0.0,>=0.0.2
 ovos-utils~=0.0, >=0.0.28
 ovos-bus-client~=0.0,>=0.0.3

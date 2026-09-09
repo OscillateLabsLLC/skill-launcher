@@ -91,8 +91,7 @@ class TestSkillMethods(SkillTestCase):
         self.assertEqual(emitted[0].data["params"], {})
 
     def test_launch_node_program_unsupported_capability(self):
-        # skill-launcher ships native_action_*.dialog files, so the
-        # neon-utils helper prefers speak_dialog over its plain-text fallback.
+        # `description` is rendered from this skill's launch_camera_app.dialog
         message = _node_message("camera", action_supported=False)
 
         self.skill.handle_launch_program(message)
@@ -141,22 +140,40 @@ class TestSkillMethods(SkillTestCase):
         self.skill.speak.assert_not_called()
         self.skill.speak_dialog.assert_not_called()
 
-    def test_launch_node_program_full_mapping_table(self):
-        from skill_launcher import PROGRAM_TO_NATIVE_ACTION
+    def test_launch_node_program_matches_program_with_article(self):
+        # voc_match is a whole-word match, so a slot like "the camera"
+        # resolves without a separate entry for every phrasing.
+        message = _node_message("the camera")
+        emitted = []
+        self.skill.bus.once("node.invoke_native",
+                            lambda m: emitted.append(m))
+        _arm_node_reply(self.skill.bus, _response(status="success"))
 
-        for program, action in PROGRAM_TO_NATIVE_ACTION.items():
-            with self.subTest(program=program):
-                message = _node_message(program, action_key=action.value)
-                emitted = []
-                self.skill.bus.once("node.invoke_native",
-                                    lambda m: emitted.append(m))
-                _arm_node_reply(self.skill.bus,
-                               _response(action=action.value,
-                                        status="success"))
+        self.skill.handle_launch_program(message)
 
-                self.skill.handle_launch_program(message)
+        self.assertEqual(emitted[0].data["action"], "launch_camera_app")
 
-                self.assertEqual(emitted[0].data["action"], action.value)
+    def test_launch_node_program_full_vocab_table(self):
+        # Every NodeNativeAction has a `<value>.voc` in this skill, and every
+        # line in it must resolve to that action.
+        from neon_data_models.enum import NodeNativeAction
+
+        for action in NodeNativeAction:
+            programs = self.skill.voc_list(action.value, "en-us")
+            self.assertTrue(programs, f"empty or missing {action.value}.voc")
+            for program in programs:
+                with self.subTest(program=program, action=action.value):
+                    message = _node_message(program, action_key=action.value)
+                    emitted = []
+                    self.skill.bus.once("node.invoke_native",
+                                        lambda m: emitted.append(m))
+                    _arm_node_reply(self.skill.bus,
+                                   _response(action=action.value,
+                                            status="success"))
+
+                    self.skill.handle_launch_program(message)
+
+                    self.assertEqual(emitted[0].data["action"], action.value)
 
     def test_browse_website_intent(self):
         # TODO

@@ -44,28 +44,6 @@ from neon_data_models.enum import NodeNativeAction
 from ovos_workshop.decorators import intent_handler
 from ovos_workshop.intents import IntentBuilder
 
-# Free-text `program` slot to `NodeNativeAction`, bare-launch only (no
-# content). "messages"/"mail" here are for the empty-composer case; a
-# content-bearing "text X that Y" is handled by skill-messaging, not here.
-PROGRAM_TO_NATIVE_ACTION = {
-    "camera": NodeNativeAction.LAUNCH_CAMERA_APP,
-    "voice recorder": NodeNativeAction.LAUNCH_VOICE_RECORDER_APP,
-    "voice memo": NodeNativeAction.LAUNCH_VOICE_RECORDER_APP,
-    "voice memos": NodeNativeAction.LAUNCH_VOICE_RECORDER_APP,
-    "recorder": NodeNativeAction.LAUNCH_VOICE_RECORDER_APP,
-    "reminders": NodeNativeAction.LAUNCH_REMINDERS_APP,
-    "clock": NodeNativeAction.LAUNCH_CLOCK_APP,
-    "alarm": NodeNativeAction.LAUNCH_CLOCK_APP,
-    "alarms": NodeNativeAction.LAUNCH_CLOCK_APP,
-    "timer": NodeNativeAction.LAUNCH_CLOCK_APP,
-    "timers": NodeNativeAction.LAUNCH_CLOCK_APP,
-    "messages": NodeNativeAction.LAUNCH_SMS_APP,
-    "texts": NodeNativeAction.LAUNCH_SMS_APP,
-    "text messages": NodeNativeAction.LAUNCH_SMS_APP,
-    "mail": NodeNativeAction.LAUNCH_EMAIL_APP,
-    "email": NodeNativeAction.LAUNCH_EMAIL_APP,
-}
-
 
 class LauncherSkill(NeonSkill):
     def __init__(self, **kwargs):
@@ -106,17 +84,30 @@ class LauncherSkill(NeonSkill):
 
     def _handle_launch_node_program(self, message):
         """
-        Map the free-text `program` slot to a `NodeNativeAction` and
+        Resolve the free-text `program` slot to a `NodeNativeAction` and
         dispatch a bare launch (no params) via the shared neon-utils
-        helper. Unmapped programs fall through to `not_supported`.
+        helper. Unmatched programs fall through to `not_supported`.
         """
         program = (message.data.get("program") or "").strip().lower()
-        action = PROGRAM_TO_NATIVE_ACTION.get(program)
+        action = self._native_action_for(program)
         if not action:
-            LOG.debug(f"No NodeNativeAction mapped for program: {program}")
+            LOG.debug(f"No NodeNativeAction vocab matched program: {program}")
             self.speak_dialog("not_supported", private=True)
             return
         invoke_native_action(self, message, action)
+
+    def _native_action_for(self, program: str) -> Optional[NodeNativeAction]:
+        """
+        Each `NodeNativeAction` value names a `.voc` file listing the spoken
+        program names it fronts, e.g. `launch_clock_app.voc` holds clock,
+        alarm and timer. Bare launch only: "messages"/"mail" here mean the
+        empty composer; a content-bearing "text X that Y" belongs to
+        skill-messaging.
+        """
+        for action in NodeNativeAction:
+            if self.voc_match(program, action.value):
+                return action
+        return None
 
     @intent_handler(IntentBuilder("BrowseWebsiteIntent")
                     .require("browse").require("website").build())
